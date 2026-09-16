@@ -1,25 +1,28 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { STATIONS, isStation } from "./stations";
 import type { Review } from "./supabase";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-const MODEL = "claude-sonnet-5";
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+// Set OPENAI_MODEL in Vercel to change this. Model names move fast — if a
+// call 404s, check platform.openai.com/docs/models and update the variable.
+// No redeploy of code needed, just the env var.
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.6";
 
 function json<T>(text: string): T {
   return JSON.parse(text.replace(/```json|```/g, "").trim()) as T;
 }
 
-async function ask(system: string, user: string, maxTokens: number) {
-  const res = await anthropic.messages.create({
+async function ask(system: string, user: string, _maxTokens: number) {
+  const res = await openai.chat.completions.create({
     model: MODEL,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: "user", content: user }],
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
   });
-  return res.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { text: string }).text)
-    .join("\n");
+  return res.choices[0]?.message?.content ?? "";
 }
 
 function method(station: string) {

@@ -11,7 +11,8 @@ Notes are anonymous. There's no login, no name list, and nothing to update when 
 3. **Vercel** — import the repo. Add these environment variables:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `ANTHROPIC_API_KEY`
+   - `OPENAI_API_KEY`
+   - `OPENAI_MODEL` — optional, defaults to `gpt-5.6`
    - `MAKE_WEBHOOK_URL` (leave blank for now)
    - `CRON_SECRET` — any random string
 4. **Deploy.** Open `/s/cupping` on your phone and send a test note. Check the row landed in Supabase. That's the product working.
@@ -31,7 +32,8 @@ Five minutes at a morning meeting. Show the sticker, say what it's for, say that
 
 - **The report runs on the 1st at 8am** and covers the month just gone. Change the schedule in `vercel.json` if you want it elsewhere.
 - **Nothing sends in a month with no notes.**
-- **The note is saved before the AI runs.** If Anthropic is down or slow, the note is already in the database and the taster just gets a plain thank you instead of the summary line.
+- **The note is saved before the AI runs.** If OpenAI is down or slow, the note is already in the database and the taster just gets a plain thank you instead of the summary line.
+- **Model names move fast.** `OPENAI_MODEL` is an environment variable, so if a call starts 404ing you change it in Vercel and redeploy — no code edit.
 - **The browser never talks to Supabase.** Everything goes through the API routes with the service role key, and RLS denies everything else.
 - **Tasters are a random id generated on the phone**, stored in localStorage. It exists only so the report can count people rather than notes. No names anywhere. A shared tablet reads as one person; someone who clears their browser reads as new.
 
