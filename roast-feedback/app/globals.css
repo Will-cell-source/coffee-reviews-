@@ -31,6 +31,7 @@ body {
 
 .screen {
   min-height: 100dvh;
+  justify-content: flex-start;
   max-width: 34rem;
   margin: 0 auto;
   padding: 1.5rem 1.25rem 1.25rem;
@@ -40,35 +41,6 @@ body {
 }
 
 /* header ---------------------------------------------------------- */
-
-.top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.station {
-  font-size: 0.95rem;
-  color: var(--muted);
-  letter-spacing: 0.01em;
-}
-
-.whoami {
-  font: inherit;
-  font-size: 0.95rem;
-  color: var(--muted);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 2px;
-  cursor: pointer;
-}
-
-.whoami:hover {
-  color: var(--ink);
-  border-color: var(--ink);
-}
 
 /* the question ---------------------------------------------------- */
 
@@ -139,35 +111,6 @@ body {
   outline-offset: 2px;
 }
 
-/* name picker ----------------------------------------------------- */
-
-.names {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.6rem;
-  align-content: start;
-}
-
-.name {
-  padding: 1.2rem 0.75rem;
-  font: inherit;
-  font-size: 1.05rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
-  color: var(--ink);
-}
-
-.name:hover {
-  border-color: var(--ink);
-}
-
-.name:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-}
-
 /* sent ------------------------------------------------------------ */
 
 .done {
@@ -210,12 +153,6 @@ body {
   margin: 0;
 }
 
-.index {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: flex-start;
-}
 
 .reply {
   font-size: 1.15rem;

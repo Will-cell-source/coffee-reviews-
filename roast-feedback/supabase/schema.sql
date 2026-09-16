@@ -4,7 +4,6 @@ create extension if not exists "pgcrypto";
 
 create table reviews (
   id          uuid primary key default gen_random_uuid(),
-  station     text not null,
   device_id   text not null,   -- random, generated on the phone. Not a person's name.
   raw_text    text not null,
   coffee_name text,

@@ -1,6 +1,6 @@
 # Roast feedback
 
-Scan a sticker, type what you think, send. You're told what everyone else said about that coffee. The owner gets a report on the 1st of each month.
+Scan the sticker, type what you think, send. You're told what everyone else said about that coffee. The owner gets a report on the 1st of each month.
 
 Notes are anonymous. There's no login, no name list, and nothing to update when staff join or leave.
 
@@ -15,7 +15,7 @@ Notes are anonymous. There's no login, no name list, and nothing to update when 
    - `OPENAI_MODEL` — optional, defaults to `gpt-5.6`
    - `MAKE_WEBHOOK_URL` (leave blank for now)
    - `CRON_SECRET` — any random string
-4. **Deploy.** Open `/s/cupping` on your phone and send a test note. Check the row landed in Supabase. That's the product working.
+4. **Deploy.** Open the site on your phone and send a test note. Check the row landed in Supabase. That's the product working.
 5. **Make** — new scenario, Custom Webhook in, Email out. Copy the webhook URL into `MAKE_WEBHOOK_URL` on Vercel and redeploy. The payload has `subject`, `body`, `team_note`, `review_count` and `needs_work`.
 6. **Test the report** before trusting the cron:
    ```
@@ -36,10 +36,6 @@ Five minutes at a morning meeting. Show the sticker, say what it's for, say that
 - **Model names move fast.** `OPENAI_MODEL` is an environment variable, so if a call starts 404ing you change it in Vercel and redeploy — no code edit.
 - **The browser never talks to Supabase.** Everything goes through the API routes with the service role key, and RLS denies everything else.
 - **Tasters are a random id generated on the phone**, stored in localStorage. It exists only so the report can count people rather than notes. No names anywhere. A shared tablet reads as one person; someone who clears their browser reads as new.
-
-## Adding a station
-
-Add an entry to `lib/stations.ts`, redeploy, run `npm run qr` again. The URL segment is the key.
 
 ## What's deliberately not here
 

@@ -1,24 +1,19 @@
 import { NextResponse } from "next/server";
 import { db, type Review } from "@/lib/supabase";
-import { isStation } from "@/lib/stations";
 import { reflect } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  let body: { station?: string; deviceId?: string; text?: string };
+  let body: { deviceId?: string; text?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const { station, deviceId, text } = body;
-
-  if (!station || !isStation(station)) {
-    return NextResponse.json({ error: "Unknown station" }, { status: 400 });
-  }
+  const { deviceId, text } = body;
   if (!text?.trim()) {
     return NextResponse.json({ error: "Empty note" }, { status: 400 });
   }
@@ -28,7 +23,7 @@ export async function POST(req: Request) {
   // Save first, always. Whatever happens after this, the note is safe.
   const { data: saved, error } = await db
     .from("reviews")
-    .insert({ station, device_id: (deviceId || "anon").slice(0, 64), raw_text: note })
+    .insert({ device_id: (deviceId || "anon").slice(0, 64), raw_text: note })
     .select("id")
     .single();
 
@@ -47,7 +42,7 @@ export async function POST(req: Request) {
       .order("created_at", { ascending: false })
       .limit(60);
 
-    const { coffee_name, message } = await reflect(note, station, (recent ?? []) as Review[]);
+    const { coffee_name, message } = await reflect(note, (recent ?? []) as Review[]);
 
     if (coffee_name) {
       await db.from("reviews").update({ coffee_name }).eq("id", saved.id);

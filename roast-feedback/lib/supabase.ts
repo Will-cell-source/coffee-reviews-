@@ -9,7 +9,6 @@ export const db = createClient(
 
 export type Review = {
   id: string;
-  station: string;
   device_id: string;
   raw_text: string;
   coffee_name: string | null;
