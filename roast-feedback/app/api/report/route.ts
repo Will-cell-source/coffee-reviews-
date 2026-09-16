@@ -12,9 +12,14 @@ export async function GET(req: Request) {
   }
 
   // Runs on the 1st, reports the month just gone.
+  // ?test=1 reports the current month instead, so you can fire one on demand
+  // to check the email still works without waiting for the 1st.
+  const test = new URL(req.url).searchParams.get("test") === "1";
+
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const offset = test ? 0 : 1;
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset + 1, 1));
   const label = start.toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
@@ -44,7 +49,7 @@ export async function GET(req: Request) {
 
   await db.from("reports").insert({
     month: start.toISOString().slice(0, 10),
-    subject: report.subject,
+    subject: test ? `[TEST] ${report.subject}` : report.subject,
     body,
     note_count: reviews.length,
   });
@@ -52,7 +57,13 @@ export async function GET(req: Request) {
   const res = await fetch(process.env.MAKE_WEBHOOK_URL!, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ month: label, subject: report.subject, body, note_count: reviews.length }),
+    body: JSON.stringify({
+      month: label,
+      subject: test ? `[TEST] ${report.subject}` : report.subject,
+      body,
+      note_count: reviews.length,
+      test,
+    }),
   });
 
   if (!res.ok) {
