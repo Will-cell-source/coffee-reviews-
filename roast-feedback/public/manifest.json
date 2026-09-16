@@ -1,0 +1,8 @@
+{
+  "name": "Tasting notes",
+  "short_name": "Tasting",
+  "start_url": "/s/cupping",
+  "display": "standalone",
+  "background_color": "#e8eae1",
+  "theme_color": "#e8eae1"
+}
