@@ -176,6 +176,22 @@ body {
   margin-bottom: 0.3rem;
 }
 
+.reload {
+  margin-top: 0.8rem;
+  padding: 0.6rem 1rem;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.reload:hover {
+  border-color: var(--ink);
+}
+
 .howto-foot {
   margin: 0.7rem 0 0;
   color: var(--muted);

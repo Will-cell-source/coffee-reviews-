@@ -285,6 +285,9 @@ export default function ReviewForm() {
               <li key={i}>{step}</li>
             ))}
           </ol>
+          <button className="reload" onClick={() => window.location.reload()}>
+            Reload the page
+          </button>
           <p className="howto-foot">Or just type your note — that works fine too.</p>
         </div>
       )}
