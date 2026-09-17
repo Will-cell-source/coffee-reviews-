@@ -151,6 +151,36 @@ body {
   opacity: 0.6;
 }
 
+.howto {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.howto-head {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.howto ol {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.howto li {
+  margin-bottom: 0.3rem;
+}
+
+.howto-foot {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+}
+
 /* actions --------------------------------------------------------- */
 
 .send {

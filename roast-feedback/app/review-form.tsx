@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { unblockSteps, type Unblock } from "@/lib/unblock";
 
 type Phase = "writing" | "sending" | "sent";
 type Mic = "idle" | "recording" | "transcribing" | "blocked" | "unsupported";
@@ -42,6 +43,7 @@ export default function ReviewForm() {
   const [phase, setPhase] = useState<Phase>("writing");
   const [mic, setMic] = useState<Mic>("idle");
   const [micNote, setMicNote] = useState<string | null>(null);
+  const [howTo, setHowTo] = useState<Unblock | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
@@ -75,14 +77,14 @@ export default function ReviewForm() {
       .then((status) => {
         if (status.state === "denied") {
           setMic("blocked");
-          setMicNote(
-            "Microphone is blocked for this site. Tap the icon in the address bar, allow the microphone, then reload."
-          );
+          setMicNote("The microphone is blocked for this site.");
+          setHowTo(unblockSteps());
         }
         status.onchange = () => {
           if (status.state === "granted") {
             setMic("idle");
             setMicNote(null);
+            setHowTo(null);
           }
         };
       })
@@ -103,6 +105,7 @@ export default function ReviewForm() {
   async function startRecording() {
     setError(null);
     setMicNote(null);
+    setHowTo(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
@@ -142,9 +145,8 @@ export default function ReviewForm() {
       const name = (e as DOMException)?.name ?? "";
       setMic("blocked");
       if (name === "NotAllowedError" || name === "SecurityError") {
-        setMicNote(
-          "Microphone permission was refused. Tap the icon in the address bar, allow the microphone, then reload the page."
-        );
+        setMicNote("The microphone is blocked for this site.");
+        setHowTo(unblockSteps());
       } else if (name === "NotFoundError" || name === "OverconstrainedError") {
         setMicNote("No microphone found on this device.");
       } else if (name === "NotReadableError" || name === "AbortError") {
@@ -274,6 +276,18 @@ export default function ReviewForm() {
       )}
 
       {micNote && <p className="error">{micNote}</p>}
+
+      {howTo && (
+        <div className="howto">
+          <p className="howto-head">To turn it on in {howTo.where}</p>
+          <ol>
+            {howTo.steps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+          <p className="howto-foot">Or just type your note — that works fine too.</p>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
 
       <button
