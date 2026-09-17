@@ -130,6 +130,28 @@ body {
   opacity: 0.8;
 }
 
+.bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+}
+
+.bar {
+  display: block;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+.meter-note {
+  margin: -0.6rem 0 0;
+  font-size: 0.88rem;
+}
+
 .dot {
   width: 9px;
   height: 9px;
@@ -144,7 +166,29 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot { animation: none; }
+  .bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+}
+
+.bar {
+  display: block;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+.meter-note {
+  margin: -0.6rem 0 0;
+  font-size: 0.88rem;
+}
+
+.dot { animation: none; }
 }
 
 .note:disabled {

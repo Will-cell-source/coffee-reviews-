@@ -9,9 +9,11 @@ type Mic = "idle" | "recording" | "transcribing" | "blocked" | "unsupported";
 const KEY = "taster-id";
 const MAX_SECONDS = 120;
 
-// Random, generated once on this phone, never shown to anyone. It exists
-// only so the monthly report can tell six notes from six people apart from
-// six notes from one person. No names, nothing to maintain when staff change.
+// Peak loudness below this means we never actually heard speech. Sending
+// silence to a transcription model produces confident nonsense — "thanks for
+// watching" and similar, which it learned from video soundtracks.
+const HEARD_THRESHOLD = 0.012;
+
 function deviceId(): string {
   try {
     const saved = localStorage.getItem(KEY);
@@ -27,15 +29,9 @@ function deviceId(): string {
   }
 }
 
-// Safari wants mp4, Chrome and Firefox want webm. Ask for whatever works.
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
-  const options = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
+  const options = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
   return options.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
 }
 
@@ -45,6 +41,7 @@ export default function ReviewForm() {
   const [micNote, setMicNote] = useState<string | null>(null);
   const [howTo, setHowTo] = useState<Unblock | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [level, setLevel] = useState(0);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,11 +50,13 @@ export default function ReviewForm() {
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtx = useRef<AudioContext | null>(null);
+  const raf = useRef<number | null>(null);
+  const peak = useRef(0);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
 
-    // A page served over plain http gets no microphone at all, in any browser.
     if (typeof window !== "undefined" && !window.isSecureContext) {
       setMic("blocked");
       setMicNote("Voice needs a secure (https) connection.");
@@ -69,9 +68,6 @@ export default function ReviewForm() {
       return;
     }
 
-    // If permission was refused on a previous visit the browser will never
-    // prompt again — it just fails. Check up front so we can say so plainly
-    // instead of looking broken. Not every browser supports this query.
     navigator.permissions
       ?.query({ name: "microphone" as PermissionName })
       .then((status) => {
@@ -88,26 +84,62 @@ export default function ReviewForm() {
           }
         };
       })
-      .catch(() => {
-        /* Safari and others don't support querying — the tap will find out */
-      });
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (phase === "writing" && mic === "idle") box.current?.focus();
   }, [phase, mic]);
 
-  function stopTicker() {
+  function cleanup() {
     if (ticker.current) clearInterval(ticker.current);
     ticker.current = null;
+    if (raf.current) cancelAnimationFrame(raf.current);
+    raf.current = null;
+    audioCtx.current?.close().catch(() => {});
+    audioCtx.current = null;
   }
 
   async function startRecording() {
     setError(null);
     setMicNote(null);
     setHowTo(null);
+    peak.current = 0;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+
+      // Watch the actual signal. Without this there's no way to tell a working
+      // microphone from a muted one until the transcript comes back wrong.
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      audioCtx.current = ctx;
+      if (ctx.state === "suspended") await ctx.resume();
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+
+      const meter = () => {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buf.length);
+        if (rms > peak.current) peak.current = rms;
+        setLevel(Math.min(1, rms * 12));
+        raf.current = requestAnimationFrame(meter);
+      };
+      meter();
+
       const mimeType = pickMimeType();
       const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       chunks.current = [];
@@ -118,18 +150,25 @@ export default function ReviewForm() {
 
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        stopTicker();
+        cleanup();
+        setLevel(0);
+
         const blob = new Blob(chunks.current, { type: mimeType || "audio/webm" });
-        if (blob.size < 1000) {
+        const heard = peak.current >= HEARD_THRESHOLD;
+
+        if (!heard || blob.size < 2000) {
           setMic("idle");
           setSeconds(0);
+          setError(
+            "Didn't hear anything. Check nothing is covering the microphone, speak a little closer, or just type it."
+          );
           return;
         }
         await transcribe(blob);
       };
 
       recorder.current = rec;
-      rec.start();
+      rec.start(250); // stream chunks rather than one blob at the end
       setMic("recording");
       setSeconds(0);
 
@@ -140,8 +179,7 @@ export default function ReviewForm() {
         });
       }, 1000);
     } catch (e) {
-      // Distinguish the real causes. They need different fixes and lumping
-      // them together as "denied" sends people to the wrong settings page.
+      cleanup();
       const name = (e as DOMException)?.name ?? "";
       setMic("blocked");
       if (name === "NotAllowedError" || name === "SecurityError") {
@@ -168,14 +206,25 @@ export default function ReviewForm() {
     setMic("transcribing");
     try {
       const form = new FormData();
-      form.append("audio", blob, "note.webm");
+      const ext = (blob.type.split("/")[1] || "webm").split(";")[0];
+      form.append("audio", blob, `note.${ext}`);
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { text: string };
+      const data = (await res.json()) as { text?: string; error?: string };
 
-      // Drops into the box rather than sending straight off, so a mangled
+      if (!res.ok || !data.text) {
+        setError(
+          data.error === "no_speech"
+            ? "Couldn't make out any speech there. Try again a bit closer, or type it."
+            : "Couldn't pick that up. Try again, or type it instead."
+        );
+        setMic("idle");
+        setSeconds(0);
+        return;
+      }
+
+      // Lands in the box rather than sending straight off, so a mangled
       // coffee name gets corrected instead of quietly poisoning the data.
-      setText((prev) => (prev.trim() ? `${prev.trim()} ${data.text}` : data.text));
+      setText((prev) => (prev.trim() ? `${prev.trim()} ${data.text}` : data.text!));
       setMic("idle");
       setSeconds(0);
       setTimeout(() => box.current?.focus(), 50);
@@ -248,7 +297,20 @@ export default function ReviewForm() {
         >
           {mic === "recording" && (
             <>
-              <span className="dot" />
+              <span className="bars" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <span
+                    key={i}
+                    className="bar"
+                    style={{
+                      transform: `scaleY(${Math.max(
+                        0.15,
+                        Math.min(1, level * (1 + Math.sin(i * 1.7) * 0.45))
+                      )})`,
+                    }}
+                  />
+                ))}
+              </span>
               Stop <span className="clock">{clock}</span>
             </>
           )}
@@ -275,6 +337,12 @@ export default function ReviewForm() {
         </button>
       )}
 
+      {mic === "recording" && (
+        <p className="hint meter-note">
+          {level > 0.08 ? "Hearing you." : "Speak up \u2014 not hearing much yet."}
+        </p>
+      )}
+
       {micNote && <p className="error">{micNote}</p>}
 
       {howTo && (
@@ -291,6 +359,7 @@ export default function ReviewForm() {
           <p className="howto-foot">Or just type your note — that works fine too.</p>
         </div>
       )}
+
       {error && <p className="error">{error}</p>}
 
       <button
