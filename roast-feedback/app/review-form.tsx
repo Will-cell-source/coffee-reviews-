@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "writing" | "sending" | "sent";
-type Mic = "idle" | "recording" | "transcribing" | "denied" | "unsupported";
+type Mic = "idle" | "recording" | "transcribing" | "blocked" | "unsupported";
 
 const KEY = "taster-id";
 const MAX_SECONDS = 120;
@@ -41,6 +41,7 @@ function pickMimeType(): string {
 export default function ReviewForm() {
   const [phase, setPhase] = useState<Phase>("writing");
   const [mic, setMic] = useState<Mic>("idle");
+  const [micNote, setMicNote] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
@@ -52,13 +53,42 @@ export default function ReviewForm() {
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setMic("unsupported");
+    if (typeof navigator === "undefined") return;
+
+    // A page served over plain http gets no microphone at all, in any browser.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setMic("blocked");
+      setMicNote("Voice needs a secure (https) connection.");
+      return;
     }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMic("unsupported");
+      return;
+    }
+
+    // If permission was refused on a previous visit the browser will never
+    // prompt again — it just fails. Check up front so we can say so plainly
+    // instead of looking broken. Not every browser supports this query.
+    navigator.permissions
+      ?.query({ name: "microphone" as PermissionName })
+      .then((status) => {
+        if (status.state === "denied") {
+          setMic("blocked");
+          setMicNote(
+            "Microphone is blocked for this site. Tap the icon in the address bar, allow the microphone, then reload."
+          );
+        }
+        status.onchange = () => {
+          if (status.state === "granted") {
+            setMic("idle");
+            setMicNote(null);
+          }
+        };
+      })
+      .catch(() => {
+        /* Safari and others don't support querying — the tap will find out */
+      });
   }, []);
 
   useEffect(() => {
@@ -72,6 +102,7 @@ export default function ReviewForm() {
 
   async function startRecording() {
     setError(null);
+    setMicNote(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
@@ -105,8 +136,22 @@ export default function ReviewForm() {
           return s + 1;
         });
       }, 1000);
-    } catch {
-      setMic("denied");
+    } catch (e) {
+      // Distinguish the real causes. They need different fixes and lumping
+      // them together as "denied" sends people to the wrong settings page.
+      const name = (e as DOMException)?.name ?? "";
+      setMic("blocked");
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setMicNote(
+          "Microphone permission was refused. Tap the icon in the address bar, allow the microphone, then reload the page."
+        );
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setMicNote("No microphone found on this device.");
+      } else if (name === "NotReadableError" || name === "AbortError") {
+        setMicNote("Something else is using the microphone. Close it and try again.");
+      } else {
+        setMicNote("Couldn't start the microphone. You can still type.");
+      }
     }
   }
 
@@ -206,7 +251,7 @@ export default function ReviewForm() {
             </>
           )}
           {mic === "transcribing" && "Writing it down\u2026"}
-          {(mic === "idle" || mic === "denied") && (
+          {(mic === "idle" || mic === "blocked") && (
             <>
               <svg
                 width="17"
@@ -228,17 +273,18 @@ export default function ReviewForm() {
         </button>
       )}
 
-      {mic === "denied" && (
-        <p className="error">
-          No microphone access. Allow it in your browser settings, or just type.
-        </p>
-      )}
+      {micNote && <p className="error">{micNote}</p>}
       {error && <p className="error">{error}</p>}
 
       <button
         className="send"
         onClick={send}
-        disabled={!text.trim() || phase === "sending" || mic !== "idle"}
+        disabled={
+          !text.trim() ||
+          phase === "sending" ||
+          mic === "recording" ||
+          mic === "transcribing"
+        }
       >
         {phase === "sending" ? "Sending\u2026" : "Send"}
       </button>
