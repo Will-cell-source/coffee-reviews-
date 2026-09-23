@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { STATIONS, isStation } from "./stations";
 import type { Review } from "./supabase";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -22,11 +21,16 @@ async function ask(system: string, user: string, _maxTokens: number) {
       { role: "user", content: user },
     ],
   });
-  return res.choices[0]?.message?.content ?? "";
-}
-
-function method(station: string) {
-  return isStation(station) ? STATIONS[station].method : station;
+  const choice = res.choices[0];
+  const content = choice?.message?.content ?? "";
+  if (!content.trim()) {
+    console.error("model returned empty content", {
+      model: MODEL,
+      finish_reason: choice?.finish_reason,
+      refusal: (choice?.message as { refusal?: string } | undefined)?.refusal,
+    });
+  }
+  return content;
 }
 
 /* ------------------------------------------------------------------ */
@@ -45,18 +49,16 @@ Return only JSON: { "coffee_name": string | null, "message": string }. No fences
 
 export async function reflect(
   note: string,
-  station: string,
   recent: Review[]
 ): Promise<{ coffee_name: string | null; message: string }> {
   const text = await ask(
     REFLECT_SYSTEM,
     JSON.stringify(
       {
-        new_note: { note, brew_method: method(station) },
+        new_note: { note },
         recent_notes: recent.map((r) => ({
           coffee: r.coffee_name,
           note: r.raw_text,
-          brew_method: method(r.station),
           at: r.created_at.slice(0, 10),
         })),
       },
@@ -65,7 +67,12 @@ export async function reflect(
     ),
     600
   );
-  return json(text);
+  const parsed = json<{ coffee_name?: string | null; message?: string }>(text);
+  console.log("reflect result", { model: MODEL, raw: text.slice(0, 500) });
+  return {
+    coffee_name: parsed.coffee_name ?? null,
+    message: parsed.message ?? "",
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,9 +87,9 @@ A month of notes lets you see things a single day can't. That's the job here —
 - Which coffees came up again and again, and which barely got mentioned.
 - Whether a problem is every roast of a coffee or one bad batch. Check the dates. "Rough on all four roasts" and "rough on one" are completely different findings.
 - Whether anything shifted over the month. If a coffee read badly early and fine later, say so — he probably changed something and it worked, and he'll want to know.
-- Whether a coffee reads differently on espresso than on filter. Never merge the two. A coffee that's fine on filter and rough on espresso usually points at the bar, not the roast.
+- How a coffee was brewed is not recorded, so where a note mentions espresso, filter or cupping, use that. Where it doesn't, don't assume.
 
-For each coffee worth a section: the overall read, then the most likely problem if there is one, then two to four factual lines he can check himself. Count things — how many people, how many mentioned what, on which method, across how many roasts.
+For each coffee worth a section: the overall read, then the most likely problem if there is one, then two to four factual lines he can check himself. Count things — how many people, how many mentioned what, across how many dates.
 
 Notes are anonymous. Each carries a taster label (A, B, C) which only tells you which notes came from the same phone, so you can count people rather than notes — five notes from one person is not five people agreeing. Never use the labels in what you write; he can't identify them and shouldn't try.
 
@@ -122,7 +129,6 @@ export async function monthlyReport(reviews: Review[], month: string): Promise<R
   const payload = reviews.map((r) => ({
     coffee: r.coffee_name,
     note: r.raw_text,
-    brew_method: method(r.station),
     taster: tasters.get(r.device_id),
     date: r.created_at.slice(0, 10),
   }));
@@ -142,8 +148,7 @@ export function withRawNotes(body: string, reviews: Review[]): string {
       month: "short",
       timeZone: "Europe/London",
     });
-    const station = isStation(r.station) ? STATIONS[r.station].label : r.station;
-    lines.push(`${date}  ${station}`);
+    lines.push(date);
     lines.push(`  ${r.raw_text}`);
     lines.push("");
   }
